@@ -36,6 +36,12 @@ def initialize_editor_state():
         st.session_state.question_type = "single_choice"
     if 'ordering_items' not in st.session_state:
         st.session_state.ordering_items = [""]
+    if 'matching_pairs' not in st.session_state:
+        st.session_state.matching_pairs = [
+            {"left": "", "right": ""},
+            {"left": "", "right": ""},
+            {"left": "", "right": ""}
+        ]
 
 def show_theme_selector():
     """Выбор темы для редактирования"""
@@ -149,8 +155,137 @@ def manage_options():
         - Пустые варианты автоматически игнорируются при сохранении
         """)
 
+def manage_matching_options():
+    """Управление парами соответствия для типа matching с отдельными полями"""
+    st.subheader("🔗 Установление соответствия")
+    
+    # Инициализация
+    if 'matching_pairs' not in st.session_state:
+        st.session_state.matching_pairs = [
+            {"left": "", "right": ""},
+            {"left": "", "right": ""},
+            {"left": "", "right": ""}
+        ]
+    
+    # Собираем все правые варианты для выпадающих списков
+    all_right_options = set()
+    for pair in st.session_state.matching_pairs:
+        if pair['right'].strip():
+            all_right_options.add(pair['right'])
+    all_right_options = sorted(list(all_right_options))
+    
+    st.write("### Настройка пар соответствия:")
+    
+    pairs_to_remove = []
+    
+    for i, pair in enumerate(st.session_state.matching_pairs):
+        st.write(f"**Пара {i+1}:**")
+        col1, col2, col3 = st.columns([5, 5, 1])
+        
+        with col1:
+            # Многострочное поле для левого элемента
+            left_value = st.text_area(
+                "Элемент левого столбца:",
+                value=pair['left'],
+                height=100,  # Высота для многострочного ввода
+                placeholder="Введите элемент левого столбца...\nМожно использовать несколько строк",
+                key=f"matching_left_{i}",
+                help="Обычно термин, определение, название"
+            )
+        
+        with col2:
+            # Многострочное поле для правого элемента с возможностью выбора из существующих
+            st.write("Элемент правого столбца:")
+            
+            # Поле для ввода нового значения
+            new_right_value = st.text_area(
+                "Введите новое значение:",
+                value=pair['right'] if pair['right'] not in all_right_options else "",
+                height=80,
+                placeholder="Введите новое значение...\nИли выберите из существующих ниже",
+                key=f"matching_right_new_{i}",
+                help="Можно ввести новое значение или выбрать из существующих"
+            )
+            
+            # Выпадающий список с существующими вариантами
+            if all_right_options:
+                selected_existing = st.selectbox(
+                    "Или выберите из существующих:",
+                    options=["-- Ввести новое значение --"] + all_right_options,
+                    index=all_right_options.index(pair['right']) + 1 if pair['right'] in all_right_options else 0,
+                    key=f"matching_right_select_{i}"
+                )
+                
+                # Определяем итоговое значение
+                if selected_existing != "-- Ввести новое значение --":
+                    final_right_value = selected_existing
+                else:
+                    final_right_value = new_right_value
+            else:
+                final_right_value = new_right_value
+        
+        with col3:
+            st.write("")  # Отступ
+            st.write("")
+            if len(st.session_state.matching_pairs) > 2:
+                if st.button("🗑️", key=f"delete_matching_{i}", use_container_width=True):
+                    pairs_to_remove.append(i)
+        
+        # Обновляем пару
+        st.session_state.matching_pairs[i] = {
+            "left": left_value,
+            "right": final_right_value
+        }
+        
+        st.write("---")
+    
+    # Удаляем отмеченные пары
+    for i in sorted(pairs_to_remove, reverse=True):
+        st.session_state.matching_pairs.pop(i)
+    
+    if pairs_to_remove:
+        st.rerun()
+    
+    # Управление количеством пар
+    st.write("**Управление парами:**")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("➕ Добавить пару", use_container_width=True, icon="➕"):
+            st.session_state.matching_pairs.append({"left": "", "right": ""})
+            st.rerun()
+    
+    with col2:
+        if st.button("🧹 Очистить все пары", use_container_width=True):
+            st.session_state.matching_pairs = [
+                {"left": "", "right": ""},
+                {"left": "", "right": ""},
+                {"left": "", "right": ""}
+            ]
+            st.rerun()
+    
+    # Валидация и предпросмотр
+    valid_pairs = [p for p in st.session_state.matching_pairs if p['left'].strip() and p['right'].strip()]
+    
+    st.info(f"✅ Заполнено пар: {len(valid_pairs)} из {len(st.session_state.matching_pairs)}")
+    
+    if len(valid_pairs) < 2:
+        st.error("❌ Добавьте хотя бы 2 пары соответствия!")
+    
+    # Предпросмотр
+    if valid_pairs:
+        st.write("### Предпросмотр соответствий:")
+        for i, pair in enumerate(valid_pairs):
+            with st.expander(f"Пара {i+1}: {pair['left'][:50]}... → {pair['right'][:50]}...", expanded=False):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write("**Левый элемент:**")
+                    st.info(pair['left'])
+                with col2:
+                    st.write("**Правый элемент:**")
+                    st.success(pair['right'])
 def manage_double_dropdown_options():
-    """Управление подвопросами для double_dropdown"""
+    """Управление подвопросами для double_dropdown с улучшенным интерфейсом"""
     st.subheader("🧩 Подвопросы с выпадающими списками")
     
     # Инициализация подвопросов
@@ -159,38 +294,61 @@ def manage_double_dropdown_options():
     
     # Форма для добавления нового подвопроса
     with st.expander("➕ Добавить новый подвопрос", expanded=True):
+        st.write("**Новый подвопрос:**")
+        
         col1, col2 = st.columns(2)
+        
         with col1:
-            new_subq_text = st.text_input("Текст подвопроса:", 
-                                        placeholder="Для первичного радиолокатора:",
-                                        key="new_subq_text")
-            new_subq_options = st.text_area("Варианты ответов (каждый с новой строки):",
-                                          placeholder="0,05°\n0,1°\n0,15°\n0,2°",
-                                          key="new_subq_options")
+            # Многострочное поле для текста подвопроса
+            new_subq_text = st.text_area(
+                "Текст подвопроса:*",
+                height=80,
+                placeholder="Введите текст подвопроса...\nМожно использовать несколько строк",
+                key="new_subq_text"
+            )
+            
+            # Многострочное поле для вариантов ответов
+            new_subq_options = st.text_area(
+                "Варианты ответов (каждый с новой строки):*",
+                height=100,
+                placeholder="Первый вариант\nВторой вариант\nТретий вариант\n...",
+                key="new_subq_options",
+                help="Каждый вариант с новой строки"
+            )
+        
         with col2:
-            new_subq_key = st.text_input("Технический ключ:", placeholder="primary_radar",
-                                       key="new_subq_key")
+            new_subq_key = st.text_input(
+                "Технический ключ:*", 
+                placeholder="primary_radar",
+                key="new_subq_key",
+                help="Уникальный идентификатор на английском"
+            )
+            
             if new_subq_options:
                 options_list = [opt.strip() for opt in new_subq_options.split('\n') if opt.strip()]
                 if options_list:
-                    new_subq_correct = st.selectbox("Правильный ответ:", options_list,
-                                                  key="new_subq_correct")
+                    new_subq_correct = st.selectbox(
+                        "Правильный ответ:*", 
+                        options_list,
+                        key="new_subq_correct"
+                    )
                 else:
                     new_subq_correct = None
+                    st.error("❌ Введите хотя бы один вариант ответа!")
             else:
                 new_subq_correct = None
         
-        if st.button("✅ Добавить подвопрос", key="add_subq"):
-            if all([new_subq_text, new_subq_key, new_subq_options, new_subq_correct]):
+        if st.button("✅ Добавить подвопрос", key="add_subq", use_container_width=True):
+            if all([new_subq_text.strip(), new_subq_key.strip(), new_subq_options.strip(), new_subq_correct]):
                 st.session_state.subquestions.append({
-                    "text": new_subq_text,
-                    "key": new_subq_key,
+                    "text": new_subq_text.strip(),
+                    "key": new_subq_key.strip(),
                     "options": [opt.strip() for opt in new_subq_options.split('\n') if opt.strip()],
                     "correct": new_subq_correct
                 })
                 st.rerun()
             else:
-                st.error("❌ Заполните все поля подвопроса!")
+                st.error("❌ Заполните все обязательные поля подвопроса!")
     
     # Отображение существующих подвопросов
     if st.session_state.subquestions:
@@ -198,17 +356,20 @@ def manage_double_dropdown_options():
         st.write("**Добавленные подвопросы:**")
         
         for i, subq in enumerate(st.session_state.subquestions):
-            with st.expander(f"📋 {subq['text']} ({subq['key']})", expanded=False):
+            with st.expander(f"📋 Подвопрос {i+1}: {subq['text'][:50]}...", expanded=False):
                 col1, col2 = st.columns([3, 1])
                 
                 with col1:
-                    st.write(f"**Текст:** {subq['text']}")
-                    st.write(f"**Ключ:** {subq['key']}")
-                    st.write(f"**Варианты:** {', '.join(subq['options'])}")
-                    st.write(f"**Правильный ответ:** {subq['correct']}")
+                    st.write("**Текст подвопроса:**")
+                    st.info(subq['text'])
+                    st.write(f"**Ключ:** `{subq['key']}`")
+                    st.write("**Варианты ответов:**")
+                    for opt in subq['options']:
+                        st.write(f"- {opt}")
+                    st.write(f"**Правильный ответ:** `{subq['correct']}`")
                 
                 with col2:
-                    if st.button("🗑️ Удалить", key=f"delete_subq_{i}"):
+                    if st.button("🗑️ Удалить", key=f"delete_subq_{i}", use_container_width=True):
                         st.session_state.subquestions.pop(i)
                         st.rerun()
     else:
@@ -285,7 +446,7 @@ def show_question_form(theme):
         # Сохраняем тип вопроса в session_state
         st.session_state.question_type = st.selectbox("Тип вопроса:*", [
             "single_choice", "multiple_choice", "dropdown", 
-            "double_dropdown", "ordering"
+            "double_dropdown", "ordering", "matching"
         ], key="question_type_select")
         
         explanation = st.text_area("Объяснение:*", height=100,
@@ -297,6 +458,8 @@ def show_question_form(theme):
         manage_double_dropdown_options()
     elif st.session_state.question_type == "ordering":
         manage_ordering_options()
+    elif st.session_state.question_type == "matching":
+        manage_matching_options()
     else:
         manage_options()  # single_choice, multiple_choice, dropdown
     
@@ -319,12 +482,17 @@ def show_question_form(theme):
 
 def safe_clear_form():
     """Безопасная очистка формы с сохранением структуры 4 полей"""
-    # Очищаем тексты, но оставляем 4 поля по умолчанию
+    # Очищаем тексты, но оставляем базовую структуру
     st.session_state.question_options = [
         {"text": "", "is_correct": False},
         {"text": "", "is_correct": False},
         {"text": "", "is_correct": False}, 
         {"text": "", "is_correct": False}
+    ]
+    st.session_state.matching_pairs = [
+        {"left": "", "right": ""},
+        {"left": "", "right": ""},
+        {"left": "", "right": ""}
     ]
     st.session_state.quick_options_text = ""
     st.session_state.ordering_items = [""]
@@ -341,7 +509,32 @@ def process_question_submission(theme, question_text, question_type, category, e
         return False
     
     # Валидация в зависимости от типа вопроса
-    if question_type == "double_dropdown":
+    if question_type == "matching":
+        valid_pairs = [p for p in st.session_state.matching_pairs if p['left'].strip() and p['right'].strip()]
+        if len(valid_pairs) < 2:
+            st.error("❌ Добавьте хотя бы 2 пары соответствия!")
+            return False
+        
+        # Создаем структуру для matching вопроса
+        left_column = [pair['left'] for pair in valid_pairs]
+        right_column = list(set([pair['right'] for pair in valid_pairs]))  # Уникальные правые значения
+        
+        correct_mapping = {}
+        for pair in valid_pairs:
+            correct_mapping[pair['left']] = pair['right']
+        
+        new_question = {
+            "id": len(theme.get('questions', [])) + 1,
+            "type": question_type,
+            "question": question_text,
+            "left_column": left_column,
+            "right_column": right_column,
+            "correct_mapping": correct_mapping,
+            "explanation": explanation,
+            "category": category
+        }
+    
+    elif question_type == "double_dropdown":
         if 'subquestions' not in st.session_state or not st.session_state.subquestions:
             st.error("❌ Добавьте хотя бы один подвопрос!")
             return False
@@ -442,6 +635,10 @@ def show_existing_questions(theme):
                     st.write("**Подвопросы:**")
                     for subq in question.get('subquestions', []):
                         st.write(f"- {subq['text']}: {subq['correct']}")
+                elif question['type'] == 'matching':
+                    st.write("**Пары соответствия:**")
+                    for left_item, right_item in question.get('correct_mapping', {}).items():
+                        st.write(f"- {left_item} → {right_item}")
                 else:
                     st.write(f"**Варианты:** {', '.join(question.get('options', []))}")
                     st.write(f"**Правильный ответ:** {question['correct']}")
@@ -480,4 +677,4 @@ def main():
     show_existing_questions(theme)
 
 if __name__ == "__main__":
-    main()
+    main()        

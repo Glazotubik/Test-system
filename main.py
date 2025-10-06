@@ -74,6 +74,19 @@ def calculate_partial_score(question, user_answer):
         score = max(0, (correct_answers - wrong_answers)) / total_possible
         return round(score, 2)
     
+    elif question["type"] == "matching":
+        if not user_answer:
+            return 0.0
+            
+        correct_count = 0
+        total_pairs = len(question['correct_mapping'])
+        
+        for left_item, correct_right in question['correct_mapping'].items():
+            if user_answer.get(left_item) == correct_right:
+                correct_count += 1
+        
+        return round(correct_count / total_pairs, 2)
+    
     elif question["type"] == "dropdown":
         return 1.0 if user_answer == question["correct"] else 0.0
     
@@ -156,7 +169,8 @@ def get_answer_key(question):
         "multiple_choice": "multiple", 
         "dropdown": "dropdown",
         "double_dropdown": "double",
-        "ordering": "ordering"
+        "ordering": "ordering",
+        "matching": "matching"
     }
     return f"q_{question['id']}_{type_map[question['type']]}"
 
@@ -190,7 +204,6 @@ def render_login_form():
                 st.rerun()
             else:
                 st.error("❌ Заполните все обязательные поля!")
-                # ПРОДОЛЖЕНИЕ main.py (часть 2/2)
 def render_question_selection():
     """Выбор темы и настройка теста"""
     st.write("### 🎯 Настройка теста")
@@ -287,9 +300,6 @@ def update_question_time():
         if q_index < len(st.session_state.question_times):
             st.session_state.question_times[q_index] = elapsed
 
-# Функции рендеринга вопросов (single_choice, multiple_choice и т.д.)
-# Они остаются без изменений, как в предыдущей версии
-
 def render_single_choice_question(question, q_index):
     """Вопрос с одним правильным ответом"""
     st.subheader(f"❓ Вопрос {q_index + 1}")
@@ -367,6 +377,7 @@ def render_multiple_choice_question(question, q_index):
         st.session_state.user_answers[answer_key] = selected_options
     
     render_navigation_buttons(question, q_index, answer_key)
+
 def render_dropdown_question(question, q_index):
     """Вопрос с выпадающим списком"""
     st.subheader(f"❓ Вопрос {q_index + 1}")
@@ -406,6 +417,86 @@ def render_dropdown_question(question, q_index):
             st.session_state.user_answers[answer_key] = selected
     
     render_navigation_buttons(question, q_index, answer_key)
+def render_matching_question(question, q_index):
+    """Вопрос на установление соответствия с улучшенным отображением"""
+    st.subheader(f"🔗 Вопрос {q_index + 1}")
+    st.write(f"**{question['question']}**")
+    st.write("*Установите соответствие между элементами левого и правого столбцов:*")
+    
+    answer_key = f"q_{question['id']}_matching"
+    
+    # Инициализация ответов пользователя
+    if answer_key not in st.session_state.user_answers:
+        st.session_state.user_answers[answer_key] = {}
+    
+    # Перемешиваем правый столбец для вариантов ответа
+    right_options = question['right_column'].copy()
+    random.shuffle(right_options)
+    
+    st.write("---")
+    
+    # Отображение пар для сопоставления
+    all_answered = True
+    
+    for left_item in question['left_column']:
+        # Контейнер для каждой пары
+        with st.container():
+            col1, col2 = st.columns([2, 3])
+            
+            with col1:
+                # Отображаем левый элемент с возможностью просмотра полного текста
+                st.write("**Левый элемент:**")
+                with st.expander("📋 Показать полный текст", expanded=False):
+                    st.info(left_item)
+            
+            with col2:
+                # Получаем текущий ответ пользователя
+                current_answer = st.session_state.user_answers[answer_key].get(left_item, "Выберите...")
+                
+                # Если ответ уже проверен - показываем заблокированное поле
+                if st.session_state.answers_checked.get(answer_key, False):
+                    st.selectbox(
+                        f"Выберите соответствие:",
+                        options=["Выберите..."] + right_options,
+                        index=right_options.index(current_answer) + 1 if current_answer in right_options else 0,
+                        key=f"locked_match_{question['id']}_{left_item}",
+                        disabled=True,
+                        label_visibility="collapsed"
+                    )
+                    
+                    # Показываем правильность ответа с полным текстом
+                    correct_answer = question['correct_mapping'][left_item]
+                    if current_answer == correct_answer:
+                        st.success("✅ Верно!")
+                        with st.expander("📋 Показать полное соответствие", expanded=False):
+                            st.write(f"**Ваш ответ:** {current_answer}")
+                            st.write(f"**Правильный ответ:** {correct_answer}")
+                    else:
+                        st.error("❌ Неверно!")
+                        with st.expander("📋 Показать детали", expanded=False):
+                            st.write(f"**Ваш ответ:** {current_answer}")
+                            st.write(f"**Правильный ответ:** {correct_answer}")
+                else:
+                    selected = st.selectbox(
+                        f"Выберите соответствие для элемента выше:",
+                        options=["Выберите..."] + right_options,
+                        index=right_options.index(current_answer) + 1 if current_answer in right_options else 0,
+                        key=f"match_{question['id']}_{left_item}",
+                        label_visibility="collapsed"
+                    )
+                    
+                    if selected != "Выберите...":
+                        st.session_state.user_answers[answer_key][left_item] = selected
+                    else:
+                        all_answered = False
+            
+            st.write("---")
+    
+    # Если ответ проверен - показываем объяснение
+    if st.session_state.answers_checked.get(answer_key, False):
+        st.info(f"**Объяснение:** {question['explanation']}")
+    
+    render_navigation_buttons(question, q_index, answer_key, all_answered)
 
 def render_double_dropdown_question(question, q_index):
     """Вопрос с несколькими выпадающими списками"""
@@ -521,11 +612,7 @@ def render_ordering_question(question, q_index):
             st.error("❌ Порядок неправильный!")
         st.info(f"**Объяснение:** {question['explanation']}")
     
-    render_navigation_buttons(question, q_index, answer_key)    
-
-# Аналогично остальные функции рендеринга вопросов...
-# render_dropdown_question, render_double_dropdown_question, render_ordering_question
-# Они остаются такими же как в предыдущей версии
+    render_navigation_buttons(question, q_index, answer_key)
 
 def render_navigation_buttons(question, q_index, answer_key, all_answered=True):
     """Кнопки навигации с проверкой ответов"""
@@ -702,6 +789,15 @@ def generate_detailed_statistics(protocol_data, user_folder):
                 else:
                     text += "║ СТАТУС: ⚠️ ЧАСТИЧНО ВЕРНО\n"
                     
+            elif question['type'] == 'matching':
+                text += "║ СООТВЕТСТВИЯ:\n"
+                for left_item in question['left_column']:
+                    user_ans = user_answer.get(left_item, 'Не ответил')
+                    correct_ans = question['correct_mapping'][left_item]
+                    is_correct = user_ans == correct_ans
+                    status = '✅ ВЕРНО' if is_correct else '❌ НЕВЕРНО'
+                    text += f"║   • {left_item}: {user_ans} → {correct_ans} ({status})\n"
+                    
             elif question['type'] == 'dropdown':
                 text += f"║ ВАРИАНТЫ: {', '.join(question['options'])}\n"
                 text += f"║ ВАШ ОТВЕТ: {user_answer}\n"
@@ -747,6 +843,7 @@ def generate_detailed_statistics(protocol_data, user_folder):
     except Exception as e:
         st.error(f"❌ Ошибка генерации детальной статистики: {e}")
         return None
+
 def generate_protocol_data():
     """Генерация данных для протокола"""
     user_info = st.session_state.user_info
@@ -795,74 +892,6 @@ def generate_protocol_data():
         })
     
     return protocol
-
-def generate_text_protocol(protocol):
-    """Генерация текстового протокола"""
-    try:
-        user = protocol['user_info']
-        
-        text = f"""
-ПРОТОКОЛ ТЕСТИРОВАНИЯ
-=====================
-
-Дата генерации: {protocol['protocol_info']['generated_at']}
-
-ДАННЫЕ ТЕСТИРУЕМОГО:
--------------------
-ФИО: {user['last_name']} {user['first_name']} {user['middle_name']}
-Должность: {user['position']}
-Дата тестирования: {user['login_time']}
-
-ИНФОРМАЦИЯ О ТЕСТЕ:
-------------------
-Тема: {protocol['test_info']['theme']}
-Категория: {protocol['test_info']['category']}
-Количество вопросов: {protocol['test_info']['total_questions']}
-
-РЕЗУЛЬТАТЫ ТЕСТИРОВАНИЯ:
------------------------
-Набрано баллов: {protocol['results']['total_score']} из {protocol['results']['max_score']}
-Процент выполнения: {protocol['results']['percentage']}%
-Общее время: {protocol['results']['total_time_formatted']}
-Среднее время на вопрос: {protocol['results']['average_time_formatted']}
-
-ОЦЕНКА:
-------
-{"ОТЛИЧНО - Тест пройден успешно!" if protocol['results']['percentage'] >= 80 else 
- "ХОРОШО - Тест пройден, рекомендуется повторение материала." if protocol['results']['percentage'] >= 60 else 
- "НЕУДОВЛЕТВОРИТЕЛЬНО - Требуется дополнительное обучение."}
-
-ДЕТАЛЬНАЯ СТАТИСТИКА ПО ВОПРОСАМ:
---------------------------------
-"""
-        
-        for detail in protocol['detailed_results']:
-            text += f"""
-Вопрос {detail['question_number']}:
-  Баллы: {detail['score']:.2f}/1.00
-  Время: {detail['time_formatted']}
-  Категория: {detail['category']}
-  Вопрос: {detail['question_text'][:100]}...
-"""
-        
-        text += "\n" + "="*50
-        text += "\nПротокол сгенерирован автоматически системой тестирования ФАП"
-        
-        # Сохраняем текстовый файл
-        protocols_dir = os.path.join(os.path.dirname(__file__), "protocols")
-        os.makedirs(protocols_dir, exist_ok=True)
-        
-        filename = f"Протокол_{user['last_name']}_{user['first_name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-        filepath = os.path.join(protocols_dir, filename)
-        
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(text)
-        
-        return filepath
-        
-    except Exception as e:
-        st.error(f"❌ Ошибка генерации текстового протокола: {e}")
-        return None
 
 def render_results():
     """Отображение результатов с раздельными протоколами"""
@@ -1060,7 +1089,8 @@ def main():
             "multiple_choice": render_multiple_choice_question,
             "dropdown": render_dropdown_question,
             "double_dropdown": render_double_dropdown_question,
-            "ordering": render_ordering_question
+            "ordering": render_ordering_question,
+            "matching": render_matching_question
         }
         
         render_func = render_functions.get(question["type"])
