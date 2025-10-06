@@ -631,17 +631,30 @@ def show_existing_questions(theme):
             with col1:
                 st.write(f"**Тип:** {question['type']}")
                 st.write(f"**Категория:** {question.get('category', 'Не указана')}")
+                
+                # Обработка разных типов вопросов
                 if question['type'] == 'double_dropdown':
                     st.write("**Подвопросы:**")
                     for subq in question.get('subquestions', []):
                         st.write(f"- {subq['text']}: {subq['correct']}")
+                        
                 elif question['type'] == 'matching':
                     st.write("**Пары соответствия:**")
                     for left_item, right_item in question.get('correct_mapping', {}).items():
                         st.write(f"- {left_item} → {right_item}")
-                else:
+                        
+                elif question['type'] == 'ordering':
+                    st.write(f"**Правильный порядок:** {', '.join(question.get('correct_order', []))}")
+                    
+                else:  # single_choice, multiple_choice, dropdown
                     st.write(f"**Варианты:** {', '.join(question.get('options', []))}")
-                    st.write(f"**Правильный ответ:** {question['correct']}")
+                    # Только для типов с полем 'correct'
+                    if 'correct' in question:
+                        if question['type'] == 'multiple_choice':
+                            st.write(f"**Правильные ответы:** {', '.join(question['correct'])}")
+                        else:
+                            st.write(f"**Правильный ответ:** {question['correct']}")
+                
                 st.write(f"**Объяснение:** {question.get('explanation', 'Нет')}")
             
             with col2:
