@@ -187,7 +187,7 @@ def render_login_form():
         
         with col2:
             middle_name = st.text_input("Отчество:", placeholder="Иванович")
-            position = st.text_input("Должность:*", placeholder="Техник по эксплуатации")
+            position = st.text_input("Должность:*", placeholder="Техник")
         
         st.markdown("**Обязательные поля отмечены звездочкой (*)**")
         
@@ -340,7 +340,7 @@ def render_single_choice_question(question, q_index):
     render_navigation_buttons(question, q_index, answer_key)
 
 def render_multiple_choice_question(question, q_index):
-    """Вопрос с несколькими правильными ответами"""
+    """Вопрос с несколькими правильными ответами - единый стиль"""
     st.subheader(f"❓ Вопрос {q_index + 1}")
     st.write(f"**{question['question']}**")
     st.write("*Выберите все правильные ответы:*")
@@ -352,22 +352,26 @@ def render_multiple_choice_question(question, q_index):
         st.session_state.user_answers[answer_key] = []
     
     options = question["options"]
+    is_checked = st.session_state.answers_checked.get(answer_key, False)
     
     # Если ответ уже проверен - показываем результат
-    if st.session_state.answers_checked.get(answer_key, False):
+    if is_checked:
         selected_options = st.session_state.user_answers[answer_key]
         
         for i, option in enumerate(options):
-            is_checked = option in selected_options
-            st.checkbox(option, value=is_checked, disabled=True, key=f"locked_multi_{question['id']}_{i}")
-        
-        # Показываем результат проверки
-        score = st.session_state.question_scores.get(answer_key, 0)
-        if score == 1.0:
-            st.success("✅ Все ответы правильные!")
-        else:
-            st.error("❌ Не все ответы правильные!")
-        st.info(f"**Объяснение:** {question['explanation']}")
+            is_selected = option in selected_options
+            is_correct = option in question["correct"]
+            
+            st.checkbox(option, value=is_selected, disabled=True, key=f"locked_multi_{question['id']}_{i}")
+            
+            # Показываем правильность каждого варианта
+            if is_selected and is_correct:
+                st.success("✅ Правильно!")
+            elif is_selected and not is_correct:
+                st.error("❌ Неправильный выбор")
+            elif not is_selected and is_correct:
+                st.error("❌ Пропущен правильный ответ")
+                
     else:
         selected_options = []
         for i, option in enumerate(options):
@@ -376,10 +380,30 @@ def render_multiple_choice_question(question, q_index):
         
         st.session_state.user_answers[answer_key] = selected_options
     
-    render_navigation_buttons(question, q_index, answer_key)
+    # Если ответ проверен - показываем общий результат и объяснение
+    if is_checked:
+        score = st.session_state.question_scores.get(answer_key, 0)
+        
+        # Визуальная обратная связь как в single_choice
+        if score == 1.0:
+            st.success("✅ Отлично! Полный балл!")
+        elif score >= 0.7:
+            st.success(f"✅ Хорошо! {score:.2f} балла из 1.00")
+        elif score >= 0.5:
+            st.warning(f"⚠️ Неплохо! {score:.2f} балла из 1.00")
+        elif score > 0:
+            st.warning(f"⚠️ Частично верно! {score:.2f} балла из 1.00")
+        else:
+            st.error("❌ Неправильно! 0.00 баллов")
+        
+        st.info(f"**Объяснение:** {question['explanation']}")
+    
+    # Проверяем, выбран ли хотя бы один ответ
+    has_answers = len(st.session_state.user_answers.get(answer_key, [])) > 0
+    render_navigation_buttons(question, q_index, answer_key, has_answers)
 
 def render_dropdown_question(question, q_index):
-    """Вопрос с выпадающим списком"""
+    """Вопрос с выпадающим списком - единый стиль"""
     st.subheader(f"❓ Вопрос {q_index + 1}")
     st.write(f"**{question['question']}**")
     
@@ -389,9 +413,10 @@ def render_dropdown_question(question, q_index):
         st.session_state.user_answers[answer_key] = None
     
     options = ["Выберите ответ..."] + question["options"]
+    is_checked = st.session_state.answers_checked.get(answer_key, False)
     
     # Если ответ уже проверен - показываем результат
-    if st.session_state.answers_checked.get(answer_key, False):
+    if is_checked:
         selected = st.selectbox(
             "Выберите правильный ответ:",
             options,
@@ -399,13 +424,14 @@ def render_dropdown_question(question, q_index):
             key=f"locked_drop_{question['id']}",
             disabled=True
         )
-        # Показываем результат проверки
-        score = st.session_state.question_scores.get(answer_key, 0)
-        if score == 1.0:
+        
+        # Показываем результат проверки как в single_choice
+        user_answer = st.session_state.user_answers[answer_key]
+        if user_answer == question["correct"]:
             st.success("✅ Правильно!")
         else:
             st.error(f"❌ Неправильно! Правильный ответ: {question['correct']}")
-        st.info(f"**Объяснение:** {question['explanation']}")
+            
     else:
         selected = st.selectbox(
             "Выберите правильный ответ:",
@@ -416,7 +442,27 @@ def render_dropdown_question(question, q_index):
         if selected != "Выберите ответ...":
             st.session_state.user_answers[answer_key] = selected
     
-    render_navigation_buttons(question, q_index, answer_key)
+    # Если ответ проверен - показываем объяснение
+    if is_checked:
+        score = st.session_state.question_scores.get(answer_key, 0)
+        
+        # Визуальная обратная связь как в single_choice
+        if score == 1.0:
+            st.success("✅ Отлично! Полный балл!")
+        elif score >= 0.7:
+            st.success(f"✅ Хорошо! {score:.2f} балла из 1.00")
+        elif score >= 0.5:
+            st.warning(f"⚠️ Неплохо! {score:.2f} балла из 1.00")
+        elif score > 0:
+            st.warning(f"⚠️ Частично верно! {score:.2f} балла из 1.00")
+        else:
+            st.error("❌ Неправильно! 0.00 баллов")
+        
+        st.info(f"**Объяснение:** {question['explanation']}")
+    
+    # Проверяем, выбран ли ответ
+    has_answer = st.session_state.user_answers.get(answer_key) is not None
+    render_navigation_buttons(question, q_index, answer_key, has_answer)
 def render_matching_question(question, q_index):
     """Версия matching вопроса с единообразным отображением результатов"""
     answer_key = f"q_{question['id']}_matching"
@@ -534,7 +580,7 @@ def render_matching_question(question, q_index):
     render_navigation_buttons(question, q_index, answer_key, all_answered)
 
 def render_double_dropdown_question(question, q_index):
-    """Вопрос с несколькими выпадающими списками"""
+    """Вопрос с несколькими выпадающими списками - единый стиль"""
     st.subheader(f"❓ Вопрос {q_index + 1}")
     st.write(f"**{question['question']}**")
     
@@ -565,12 +611,14 @@ def render_double_dropdown_question(question, q_index):
                 disabled=True,
                 label_visibility="collapsed"
             )
-            # Показываем правильность для каждого подвопроса
+            
+            # Показываем правильность для каждого подвопроса как в single_choice
             user_ans = st.session_state.user_answers[answer_key][subq["key"]]
             if user_ans == subq["correct"]:
-                st.success(f"✅ Правильно: {user_ans}")
+                st.success("✅ Правильно!")
             else:
-                st.error(f"❌ Неправильно! Ваш ответ: {user_ans}, Правильный: {subq['correct']}")
+                st.error(f"❌ Неправильно! Правильный ответ: {subq['correct']}")
+                
         else:
             # Активные выпадающие списки
             selected = st.selectbox(
@@ -589,13 +637,28 @@ def render_double_dropdown_question(question, q_index):
     
     st.write("---")
     
+    # Если ответ проверен - показываем общий результат и объяснение
     if is_checked:
+        score = st.session_state.question_scores.get(answer_key, 0)
+        
+        # Визуальная обратная связь как в single_choice
+        if score == 1.0:
+            st.success("✅ Отлично! Полный балл!")
+        elif score >= 0.7:
+            st.success(f"✅ Хорошо! {score:.2f} балла из 1.00")
+        elif score >= 0.5:
+            st.warning(f"⚠️ Неплохо! {score:.2f} балла из 1.00")
+        elif score > 0:
+            st.warning(f"⚠️ Частично верно! {score:.2f} балла из 1.00")
+        else:
+            st.error("❌ Неправильно! 0.00 баллов")
+        
         st.info(f"**Объяснение:** {question['explanation']}")
     
     render_navigation_buttons(question, q_index, answer_key, all_answered if not is_checked else True)
 
 def render_ordering_question(question, q_index):
-    """Вопрос на упорядочивание"""
+    """Вопрос на упорядочивание - единый стиль"""
     st.subheader(f"❓ Вопрос {q_index + 1}")
     st.write(f"**{question['question']}**")
     st.write("*Пронумеруйте этапы от 1 (первый) до 4 (последний)*")
@@ -638,16 +701,27 @@ def render_ordering_question(question, q_index):
     
     st.write("---")
     
+    # Если ответ проверен - показываем результат
     if is_checked:
-        # Показываем результат проверки
         score = st.session_state.question_scores.get(answer_key, 0)
+        
+        # Визуальная обратная связь как в single_choice
         if score == 1.0:
-            st.success("✅ Порядок правильный!")
+            st.success("✅ Отлично! Полный балл!")
+        elif score >= 0.7:
+            st.success(f"✅ Хорошо! {score:.2f} балла из 1.00")
+        elif score >= 0.5:
+            st.warning(f"⚠️ Неплохо! {score:.2f} балла из 1.00")
+        elif score > 0:
+            st.warning(f"⚠️ Частично верно! {score:.2f} балла из 1.00")
         else:
-            st.error("❌ Порядок неправильный!")
+            st.error("❌ Неправильно! 0.00 баллов")
+        
         st.info(f"**Объяснение:** {question['explanation']}")
     
-    render_navigation_buttons(question, q_index, answer_key)
+    # Проверяем, все ли порядки установлены (не равны 0)
+    all_ordered = all(order > 0 for order in data["user_order"])
+    render_navigation_buttons(question, q_index, answer_key, all_ordered)
 
 def render_navigation_buttons(question, q_index, answer_key, all_answered=True):
     """Кнопки навигации с проверкой ответов"""
