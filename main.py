@@ -9,11 +9,12 @@ from fpdf import FPDF
 
 # Добавляем путь для импорта
 sys.path.append(os.path.join(os.path.dirname(__file__), 'utils'))
-from theme_loader import scan_themes, get_categories_for_theme
+# Явно указываем путь
+from utils.theme_loader import scan_themes, get_categories_for_theme
 
 # Настройка страницы
 st.set_page_config(
-    page_title="Тесты по ФАП - Модульная версия",
+    page_title="Система тестирования МАКС",
     page_icon="✈️",
     layout="wide"
 )
