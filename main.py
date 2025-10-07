@@ -418,10 +418,19 @@ def render_dropdown_question(question, q_index):
     
     render_navigation_buttons(question, q_index, answer_key)
 def render_matching_question(question, q_index):
-    """Вопрос на установление соответствия с улучшенным отображением"""
+    """Версия matching вопроса с единообразным отображением результатов"""
+    answer_key = f"q_{question['id']}_matching"
+    
+    # Инициализация
+    if answer_key not in st.session_state.user_answers:
+        st.session_state.user_answers[answer_key] = {}
+    
+    # Перемешиваем правый столбец
+    right_options = question['right_column'].copy()
+    random.shuffle(right_options)
+    
     st.subheader(f"🔗 Вопрос {q_index + 1}")
     st.write(f"**{question['question']}**")
-    st.write("*Установите соответствие между элементами левого и правого столбцов:*")
     
     answer_key = f"q_{question['id']}_matching"
     
@@ -437,63 +446,89 @@ def render_matching_question(question, q_index):
     
     # Отображение пар для сопоставления
     all_answered = True
+    any_changes = False
+    is_checked = st.session_state.answers_checked.get(answer_key, False)
     
-    for left_item in question['left_column']:
-        # Контейнер для каждой пары
-        with st.container():
-            col1, col2 = st.columns([2, 3])
+    for i, left_item in enumerate(question['left_column']):
+        col1, col2 = st.columns([2, 3])
+        
+        with col1:
+            st.write(f"**{left_item}**")
+        
+        with col2:
+            current_value = st.session_state.user_answers[answer_key].get(left_item, "Выберите...")
             
-            with col1:
-                # Отображаем левый элемент с возможностью просмотра полного текста
-                st.write("**Левый элемент:**")
-                with st.expander("📋 Показать полный текст", expanded=False):
-                    st.info(left_item)
+            # Уникальный ключ для selectbox
+            select_key = f"match_{question['id']}_{i}_{q_index}"
+            if select_key not in st.session_state:
+                st.session_state[select_key] = current_value
             
-            with col2:
-                # Получаем текущий ответ пользователя
-                current_answer = st.session_state.user_answers[answer_key].get(left_item, "Выберите...")
+            # Если ответ уже проверен - показываем заблокированное поле
+            if is_checked:
+                st.selectbox(
+                    f"Соответствие для {left_item}:",
+                    options=["Выберите..."] + right_options,
+                    index=right_options.index(current_value) + 1 if current_value in right_options else 0,
+                    key=f"locked_{select_key}",
+                    disabled=True,
+                    label_visibility="collapsed"
+                )
                 
-                # Если ответ уже проверен - показываем заблокированное поле
-                if st.session_state.answers_checked.get(answer_key, False):
-                    st.selectbox(
-                        f"Выберите соответствие:",
-                        options=["Выберите..."] + right_options,
-                        index=right_options.index(current_answer) + 1 if current_answer in right_options else 0,
-                        key=f"locked_match_{question['id']}_{left_item}",
-                        disabled=True,
-                        label_visibility="collapsed"
-                    )
-                    
-                    # Показываем правильность ответа с полным текстом
-                    correct_answer = question['correct_mapping'][left_item]
-                    if current_answer == correct_answer:
-                        st.success("✅ Верно!")
-                        with st.expander("📋 Показать полное соответствие", expanded=False):
-                            st.write(f"**Ваш ответ:** {current_answer}")
-                            st.write(f"**Правильный ответ:** {correct_answer}")
-                    else:
-                        st.error("❌ Неверно!")
-                        with st.expander("📋 Показать детали", expanded=False):
-                            st.write(f"**Ваш ответ:** {current_answer}")
-                            st.write(f"**Правильный ответ:** {correct_answer}")
+                # Показываем результат проверки как в single_choice
+                user_answer = st.session_state.user_answers[answer_key].get(left_item, "Выберите...")
+                correct_answer = question['correct_mapping'][left_item]
+                
+                if user_answer == correct_answer:
+                    st.success("✅ Правильно!")
                 else:
-                    selected = st.selectbox(
-                        f"Выберите соответствие для элемента выше:",
-                        options=["Выберите..."] + right_options,
-                        index=right_options.index(current_answer) + 1 if current_answer in right_options else 0,
-                        key=f"match_{question['id']}_{left_item}",
-                        label_visibility="collapsed"
-                    )
+                    st.error(f"❌ Неправильно! Правильный ответ: {correct_answer}")
                     
-                    if selected != "Выберите...":
-                        st.session_state.user_answers[answer_key][left_item] = selected
-                    else:
-                        all_answered = False
+            else:
+                # Активное поле для выбора
+                selected = st.selectbox(
+                    f"Выберите соответствие для {left_item}:",
+                    options=["Выберите..."] + right_options,
+                    index=right_options.index(st.session_state[select_key]) + 1 if st.session_state[select_key] in right_options else 0,
+                    key=select_key,
+                    label_visibility="collapsed"
+                )
+                
+                # Обновляем session_state для selectbox
+                if selected != st.session_state[select_key]:
+                    st.session_state[select_key] = selected
+                    any_changes = True
+                
+                # Обновляем ответы пользователя
+                if selected != current_value:
+                    st.session_state.user_answers[answer_key][left_item] = selected
+                    any_changes = True
             
-            st.write("---")
+            # Проверяем, выбран ли ответ
+            if st.session_state.user_answers[answer_key].get(left_item, "Выберите...") == "Выберите...":
+                all_answered = False
+        
+        st.write("---")
     
-    # Если ответ проверен - показываем объяснение
-    if st.session_state.answers_checked.get(answer_key, False):
+    # Принудительный rerun при изменениях
+    if any_changes:
+        st.rerun()
+    
+    # Если ответ проверен - показываем объяснение (как в single_choice)
+    if is_checked:
+        score = st.session_state.question_scores.get(answer_key, 0)
+        
+        # Визуальная обратная связь как в single_choice
+        if score == 1.0:
+            st.success("✅ Отлично! Полный балл!")
+        elif score >= 0.7:
+            st.success(f"✅ Хорошо! {score:.2f} балла из 1.00")
+        elif score >= 0.5:
+            st.warning(f"⚠️ Неплохо! {score:.2f} балла из 1.00")
+        elif score > 0:
+            st.warning(f"⚠️ Частично верно! {score:.2f} балла из 1.00")
+        else:
+            st.error("❌ Неправильно! 0.00 баллов")
+        
         st.info(f"**Объяснение:** {question['explanation']}")
     
     render_navigation_buttons(question, q_index, answer_key, all_answered)
